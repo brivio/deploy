@@ -1,0 +1,684 @@
+#!/bin/bash
+#不要手动修改这个文件!
+_command_exist() {
+    type "$1" &> /dev/null
+}
+_setup_script_env(){
+    set -e
+    REQUIRE_COMMANDS="awk curl git grep openssl scp ssh unzip wget zip "
+    COLOR_RED="\033[31m"
+    COLOR_GREEN="\033[32m"
+    COLOR_YELLOW="\033[33m"
+    COLOR_BLUE="\033[34m"
+    COLOR_END="\033[0m"
+    HOME_PATH="$(cd ~;pwd)"
+    SCRIPT_PATH="$(cd $(dirname $0);pwd)"
+    WORK_PATH="$(pwd)"
+    SYSTEM_NAME="unknow"
+    case "$(uname)" in
+        Darwin)
+            SYSTEM_NAME="darwin"
+        ;;
+        CYGWIN*)
+            SYSTEM_NAME="cygwin"
+        ;;
+        Linux)
+            SYSTEM_NAME="linux"
+        ;;
+    esac
+}
+_check_darwin_gnu(){
+    if [[ $(uname) != 'Darwin' ]]; then
+        return
+    fi
+    if ! _command_exist brew; then
+        /usr/bin/ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"
+    fi    
+    local package=""
+    while [[ $# > 0 ]]; do
+        dir="/usr/local/opt/$1"
+        if [[ ! -d $dir ]]; then
+            package="$package $i"
+        fi
+        dir="$dir/libexec/gnubin"
+        if [[ -d $dir ]]; then
+            PATH="$dir:$PATH"
+        fi
+        shift
+    done
+    if [[ -n $package ]]; then
+        brew install $package
+    fi
+}
+_real_path(){
+    if [[ $SYSTEM_NAME = 'cygwin' ]]; then
+        cygpath -wp $1
+    else
+        echo $1
+    fi
+}
+_get_file_content(){
+    if [[ -f $1 ]]; then
+        cat $1
+    fi
+}
+_expr(){
+    awk "BEGIN{printf $1}"
+}
+_build_log(){
+    step=${step:=0}
+    step=$(_expr "$step + 1")
+    printf "\033[34m$step)、$1\033[0m\n"
+}
+_error_log(){
+    printf "\033[31m$1\033[0m\n"
+}
+_success_log(){
+    printf "\033[32m$1\033[0m\n"
+}
+_info_log(){
+    printf "\033[33m$1\033[0m\n"
+}
+_function_str(){
+    while [[ $# > 0 ]]; do
+        type $1|tail -n +2
+        shift
+    done
+}
+_runtime_exit(){
+    _success_log "完成时间:$(_date)"
+    exit
+}
+_check_script_env(){
+    check_cmd_error=""
+    for i in $REQUIRE_COMMANDS; do
+        if ! _command_exist $i ; then
+            check_cmd_error="$check_cmd_error${COLOR_RED}${i}${COLOR_END}不存在\n"
+        fi
+    done
+    if [[ -n $check_cmd_error ]]; then
+        printf "$check_cmd_error"
+        exit
+    fi
+}
+_kill(){
+    pid=$(pgrep -l $1|awk '{print $1}')
+    if [[ -n $pid ]]; then
+        sudo kill $pid
+    fi
+}
+_nohup(){
+    nohup $@ >/dev/null 2>&1 &
+}
+_pid_status(){
+    pid=$1
+    if [[ $pid -gt 0 ]]; then
+        if ps -p $pid >/dev/null ; then
+            return 0
+        else
+            return 1
+        fi
+    else
+        return 1
+    fi
+}
+_user_group(){
+    id -gn
+}
+_touch(){
+    if [[ $# > 0 ]]; then
+        touch $@
+    fi
+}
+_test_port() {
+    if netstat -an | egrep "[.:]$1 .*LISTEN" > /dev/null;then
+        return 0
+    else
+        return 1
+    fi
+}
+_date(){
+    if [[ $# -eq 0 ]]; then
+        date "+%Y-%m-%d %H:%M:%S"
+    else
+        date -d @$1 "+%Y-%m-%d %H:%M:%S"
+    fi
+}
+_date_raw(){
+    date "+%Y%m%d%H%M%S"
+}
+_strtotime(){
+    option=''
+    if [[ $# -eq 0 ]]; then
+        eval "date +%s"
+    else
+        eval "date -f '%Y-%m-%d %H:%M:%S' $1 +%s"
+    fi
+}
+_dl(){
+    cmd="wget -c -t 0 --content-disposition --no-check-certificate \"$1\" "
+    if [[ -n $2 ]]; then
+        cmd="$cmd -O $2"
+    fi
+    printf "\033[33m$cmd\033[0m\n"
+    eval "$cmd"
+}
+_scp(){
+    printf "${COLOR_YELLOW}scp -r -p $1 $HOSTNAME:$SERVER_PATH$2${COLOR_END}\n"
+    scp -r -p $1 $HOSTNAME:$SERVER_PATH$2
+}
+_ssh(){
+    ssh $HOSTNAME 'bash -s' "set -e \n $@"
+}
+_ls_git(){
+    find . -name ".git"
+}
+_rm_git(){
+    rm-file git
+}
+_git_init_push(){
+    git add .;git commit -m '代码初始化';git push origin master -f
+}
+_ls_files(){
+    if [[ -n $1 ]]; then
+        eval "find "$1" -type f 2>/dev/null|sort|uniq"
+    fi
+}
+_add_unstaged_file(){
+    if [[ -d ./.git ]]; then
+        files=$(_ls_files "$(git status -s|grep -E "^\?\?"|sed 's/^...//')")
+        _touch $files
+        if [[ -n $files ]]; then
+            git add $files 2>/dev/null
+        fi
+    fi
+}
+_get_uncommit_files(){
+    files=$(git status -s|grep -e "^R"|grep -o -e "->.*"|sed 's/^...//')
+    files="$files"$(git status -s|grep -v "^R"|sed 's/^...//')
+    echo "$files"
+}
+_touch_uncommit_files(){
+    if [[ -d ./.git ]]; then
+        _touch $(_ls_files "$(_get_uncommit_files)")
+    fi
+}
+_upper(){
+    echo "$1"|tr "[:lower:]" "[:upper:]"
+}
+_lower(){
+    echo "$1"|tr "[:upper:]" "[:lower:]"
+}
+_trim(){
+    echo "$1"|sed 's/ //g'
+}
+_length(){
+    echo $(echo "$1"|wc -c)
+}
+_sed_file(){
+    sed -i $1 $2
+}
+_remove_blank_lines(){
+  _sed_file '/^$/d' $1
+}
+_row_val(){
+    echo $(echo "$1"|grep -E "$2\s*:"|head -n1|awk 'BEGIN{NF=":"}{printf $2}')
+}
+_rm(){
+    while [[ $# > 0 ]]; do
+        if [[ -r $1 ]]; then
+            rm -rf $1
+        fi
+        shift
+    done
+}
+_ln(){
+    if [[ $# < 2 ]]; then
+        return
+    fi
+    _rm $2
+    ln -s $1 $2
+}
+_rm_file(){
+    for i in $(find . -name ".$1"); do
+        rm -rf $i
+        echo "rm -rf $i"
+    done
+}
+_mkdir(){
+    while [[ $# > 0 ]]; do
+        if [[ ! -r $1 ]]; then
+            mkdir -p $1
+            chmod -R 777 $1
+        fi
+        shift
+    done
+}
+_get_opt(){
+    for i in $@; do
+        if [[ $i = $1 ]]; then
+            continue
+        fi
+        key=$(echo $i|grep -o -E '\-(.*)[=|[:space:]]'|sed 's/^--//g'|sed 's/^-//g'|sed 's/=$//g')
+        if [[ $key = $1 ]]; then
+            echo $(echo $i|grep -o -E '[=|[:space:]](.*)'|sed 's/^=//g')
+            break
+        fi
+    done
+}
+_cp(){
+  if [[ -f $2 ]]; then
+    rm -rf $2
+  fi
+  cp $1 $2
+}
+_shellc(){
+    local max_line
+    max_line=0
+    dist_bin=$2
+    if [[ -r $dist_bin ]]; then
+      rm -rf $dist_bin
+    fi
+    cat "$1" | while read line
+    do
+        res=$(_trim "$line")
+        if [[ ${res:0:1} = '.' || -z $res ]]; then
+          include_file=$(_trim ${res:1:$(_length $res)})
+          include_file=${include_file/\~/$HOME_PATH}
+          cat $include_file>>$dist_bin
+          printf "\n">>$dist_bin
+        else
+          echo $line>>$dist_bin
+        fi
+    done
+    _sed_file "s/^[[:space:]]*#.*//g" $dist_bin
+    _sed_file "s/^function[[:space:]]*//g" $dist_bin
+    _remove_blank_lines $dist_bin
+    sed -i -e "1i\\
+\#!/bin/bash\\
+\#不要手动修改这个文件!" $dist_bin
+}
+_x(){
+    local remove_archive
+    local success
+    local file_name
+    local extract_dir
+    if (( $# == 0 )); then
+        echo "Usage: extract [-option] [file ...]"
+        echo
+        echo Options:
+        echo "    -r, --remove    Remove archive."
+        echo
+        echo "Report bugs to <sorin.ionescu@gmail.com>."
+    fi
+    remove_archive=1
+    if [[ "$1" == "-r" ]] || [[ "$1" == "--remove" ]]; then
+        remove_archive=0
+        shift
+    fi
+    while (( $# > 0 )); do
+        if [[ ! -f "$1" ]]; then
+            echo "extract: '$1' is not a valid file" 1>&2
+            shift
+            continue
+        fi
+        success=0
+        file_name="$( basename "$1" )"
+        extract_dir="$( echo "$file_name" | sed "s/\.${1##*.}//g" )"
+        case "$1" in
+        (*.tar.gz|*.tgz)
+            [ -z $commands[pigz] ] && tar zxvf "$1" || pigz -dc "$1" | tar xv
+            ;;
+        (*.tar.bz2|*.tbz|*.tbz2)
+            tar xvjf "$1"
+            ;;
+        (*.tar.xz|*.txz)
+            tar --xz --help &> /dev/null \
+                && tar --xz -xvf "$1" \
+            || xzcat "$1" | tar xvf -
+            ;;
+        (*.tar.zma|*.tlz)
+            tar --lzma --help &> /dev/null \
+                && tar --lzma -xvf "$1" \
+            || lzcat "$1" | tar xvf -
+            ;;
+        (*.tar)
+            tar xvf "$1"
+            ;;
+        (*.gz)
+            [ -z $commands[pigz] ] && gunzip "$1" || pigz -d "$1"
+            ;;
+        (*.bz2)
+            bunzip2 "$1"
+            ;;
+        (*.xz)
+            unxz "$1"
+            ;;
+        (*.lzma)
+            unlzma "$1"
+            ;;
+        (*.Z)
+            uncompress "$1"
+            ;;
+        (*.zip|*.war|*.jar|*.sublime-package|*.ipsw|*.xpi|*.apk)
+            unzip "$1" -d $extract_dir
+            ;;
+        (*.rar)
+            unrar x -ad "$1"
+            ;;
+        (*.7z)
+            7za x "$1"
+            ;;
+        (*.deb)
+            mkdir -p "$extract_dir/control"
+            mkdir -p "$extract_dir/data"
+            cd "$extract_dir"; ar vx "../${1}" > /dev/null
+            cd control; tar xzvf ../control.tar.gz
+            cd ../data; tar xzvf ../data.tar.gz
+            cd ..; rm *.tar.gz debian-binary
+            cd ..
+            ;;
+        (*)
+            echo "extract: '$1' cannot be extracted" 1>&2
+            success=1
+            ;;
+        esac
+            (( success = $success > 0 ? $success : $? ))
+            (( $success == 0 )) && (( $remove_archive == 0 )) && rm "$1"
+        shift
+    done
+}
+_zip_file(){
+    start_time=$(date +%s.%N)
+    files=$2
+    total_row=$(echo $(echo "$files"|wc -l))
+    once_count=500
+    for (( i=1; i <= $total_row; i+=$once_count )); do
+        printf "$i/$total_row\r"
+        zip_files=$(echo "$files"|awk 'BEGIN{FS="\n"}NR=='$i',NR=='$(expr $i + $once_count - 1)'{printf "\"%s\" ",$1}')
+        eval "zip -q -r $1 $zip_files"
+    done
+    printf "$total_row/$total_row\r"
+    end_time=$(date +%s.%N)
+    executed_seconds=$(echo|awk "{printf \"%.3f\",$end_time-$start_time}")
+    printf "\033[33m耗时:${executed_seconds}s 大小："$(ls -lh $1|awk '{printf "%s(%s)",$5,$9}')"\033[0m\r\n"
+}
+_gen_rsa_key(){
+    private_key="./rsa_private_key.pem"
+    public_key="./rsa_public_key.pem"
+    pkcs8_file="./rsa_private_key_pkcs8.pem"
+    _build_log "生成私钥、公钥、pkcs8"
+    openssl genrsa -out $private_key 2048
+    openssl rsa -in $private_key -pubout -out $public_key
+    openssl pkcs8 -topk8 -inform PEM -in $private_key -outform PEM –nocrypt>$pkcs8_file
+}
+_sslc(){
+    openssl aes-128-cbc -salt -in $1 -out $1.aes && rm -f $1
+}
+_ssld(){
+    openssl aes-128-cbc -d -salt -in $1.aes -out $1 && rm -f $1.aes
+}
+_base64_encode(){
+    printf "$1"|openssl base64
+}
+_base64_decode(){
+    printf "$1"|openssl base64 -d
+}
+_md5(){
+    printf "$1"|openssl md5 -binary| xxd -p
+}
+_sha(){
+    printf "$1"|openssl sha -binary| xxd -p
+}
+_sha1(){
+    printf "$1"|openssl sha1 -binary| xxd -p
+}
+_gen_password(){
+    openssl rand 5 -base64
+}
+_local_ip(){
+    case $SYSTEM_NAME in
+        linux )
+            echo $(ifconfig eth0|awk -F'[:B]' '/inet addr/{print $2}')
+            ;;
+        darwin)
+            echo $(ifconfig en0|awk '/inet /{printf $2}')
+            ;;
+        cygwin)
+            echo $(ipconfig|grep 'IPv4'|head -n1|awk 'BEGIN{FS=":"}{printf "%s\n",$2}')
+            ;;
+    esac
+}
+_get_dns(){
+    cat /etc/resolv.conf|awk '$1=="nameserver"{printf "%s\n",$2}'
+}
+_add_system_info(){
+    printf '%-15s: %s\n' "$1" "$2"
+}
+_system_info(){
+    _add_system_info "System" $(uname)
+    case $(uname) in
+        Linux )
+            cpu_info=$(cat /proc/cpuinfo)
+            cpu_name=$(_row_val "$cpu_info" "model name")
+            _add_system_info "CPU" "$cpu_name"
+            mem_info=$(cat /proc/meminfo)
+            mem_total=$(expr $(_row_val "$mem_info" "MemTotal"|awk '{printf $1}') / 1024 )
+            mem_available=$(expr $(_row_val "$mem_info" "MemAvailable"|awk '{printf $1}') / 1024)
+            _add_system_info "Memory" "共${mem_total}M 可用${mem_available}M"
+            disk_info=$(df -h)
+            _add_system_info "Disk" "$(df -h|awk 'NR==2{printf "共%s 可用%s",$2,$4}')"
+            ;;
+        Darwin)
+            echo 'mac'
+            ;;
+    esac
+}
+_install_package(){
+    while [[ $# > 0 ]]; do
+        if ! type $1 &>/dev/null; then
+            if type yum &>/dev/null; then
+                yum install -y $1
+            elif type apt-get &>/dev/null; then
+                apt-get install $1
+            elif type brew &>/dev/null; then
+                brew install $1
+            fi
+        fi
+        shift
+    done
+}
+_progress_bar(){
+    let _progress=(${1}*100/${2}*100)/100
+    let _done=(${_progress}*4)/10
+    let _left=40-$_done
+    _fill=$(printf "%${_done}s")
+    _empty=$(printf "%${_left}s")
+    printf "\rProgress : [${_fill// /#}${_empty// /-}] ${_progress}%%"
+}
+_add_help(){
+    HELP_TITLE_MAX_LENGTH=${HELP_TITLE_MAX_LENGTH-0}
+    if [[ $HELP_TITLE_MAX_LENGTH -lt ${#1} ]]; then
+        HELP_TITLE_MAX_LENGTH=${#1}
+    fi
+    HELP_INDEX=${HELP_INDEX-0}
+    HELP_TITLE[$HELP_INDEX]="$1"
+    HELP_CONTENT[$HELP_INDEX]="$2"
+    HELP_INDEX=$(_expr "$HELP_INDEX+1")
+}
+_show_help(){
+    content="选项:\n"
+    for (( i = 0; i <= $HELP_INDEX; i++ )); do
+        content="$content$(printf "\t$COLOR_BLUE%-${HELP_TITLE_MAX_LENGTH}s$COLOR_END" "${HELP_TITLE[$i]}")"
+        
+        info="$(printf "${HELP_CONTENT[$i]}"|awk "BEGIN{FS=\"\n\"}NR==1{printf \"%s\n\",\$1}")"
+        content="$content$info\n" 
+        info="$(printf "${HELP_CONTENT[$i]}"|awk "BEGIN{FS=\"\n\"}NR>1{printf \"%-${HELP_TITLE_MAX_LENGTH}s\t%s\n\",\"\",\$1}")"
+        if [[ -n $info ]]; then
+            content="$content$COLOR_YELLOW$info$COLOR_END\n"
+        fi
+    done
+    printf "$content"
+    exit
+}
+_extract_bin(){
+    local line=$(cat $0|grep -En '^__EXTRAL_BIN__$'|awk 'BEGIN{FS=":"}{printf "%s\n",$1+1}')
+    if [[ -n $line ]]; then
+        cat $0|tail -n +$line>$1
+    fi
+    
+}
+_runtime_init(){
+    _setup_script_env
+    _check_darwin_gnu coreutils findutils md5sha1sum gnu-sed
+}
+_runtime_init
+_deploy_init(){
+    REQUIRE_COMMANDS="$REQUIRE_COMMANDS adb aapt gradle keytool "
+    _check_script_env
+    TEMP_DIR=/tmp/adeploy
+    _mkdir $TEMP_DIR
+    CONFIG='./deploy.config'
+    if [[ ! -f $CONFIG ]]; then
+        cat > $CONFIG <<EOF
+sdk_download_url=
+EOF
+    fi
+    APP_MODULES=$(cat ./settings.gradle|grep -o -e "\'.*\'"|sed "s/\'//g"|sed "s/\"//g"|sed "s/\:/\//g")
+}
+_device_exist(){
+    if [[ $(adb devices |wc -l) = "2" ]]; then
+        return 1
+    else
+        return 0    
+    fi
+}
+_start_activity(){
+    APK="./app/build/outputs/apk/app-${1}.apk"
+    if [[ ! -f $APK ]]; then
+        echo $APK"不存在!"
+        exit
+    fi
+    APP_PACKAGE=`aapt dump badging $APK| grep package | awk '{print $2}' | sed s/name=//g | sed s/\'//g`
+    LOUNCH_ACITIVY=`aapt dump badging $APK| grep launchable-activity | awk '{print $2}' | sed s/name=//g | sed s/\'//g` 
+    APP_NAME=`aapt dump badging $APK|grep "application-label:"| sed s/application-label://g | sed s/\'//g` 
+    if _device_exist ; then
+        _build_log "安装[$1]"
+        adb shell pm uninstall -k $APP_PACKAGE > /dev/null
+        adb install $APK > /dev/null
+        _build_log "启动[$1]"
+        adb shell am start -n $APP_PACKAGE/$LOUNCH_ACITIVY > /dev/null
+    fi
+    
+    DIST_PATH=~/app-bin
+    [[ ! -d $DIST_PATH ]] && mkdir $DIST_PATH
+    cp $APK $DIST_PATH/${APP_NAME}-${1}.apk
+}
+_signature(){
+    echo $3'值:'
+    keytool -list -v -keystore $1 -storepass $2 \
+        |grep $3 \
+        |sed 's/://g' \
+        |sed "s/$3//" \
+        |sed 's/^[[:space:]]*//g' \
+        |tr [A-Z] [a-z]
+}
+_require(){
+    if ! which $1>/dev/null ; then
+        echo "找不到\033[31m$1\033[0m命令!"
+        echo "详见:$2"
+    fi
+}
+ARG="api"
+_add_help $ARG "生成ApiSDK"
+if [[ $1 = $ARG ]]; then
+    cd $WORK_PATH
+    if [[ -n "$sdk_download_url" ]]; then
+        _build_log "远程获取api sdk"
+        [[ -f ./android.zip ]]&&rm -rf ./android.zip
+        wget -q $sdk_download_url -O ./android.zip
+        [[ -d ./third_party/Api-SDK ]]&&rm -rf ./third_party/Api-SDK
+        unzip -q ./android.zip -d ./third_party/
+        mv ./third_party/android ./third_party/Api-SDK
+        [[ -f ./android.zip ]]&&rm -rf ./android.zip
+        printf "集成完成\n"
+        _runtime_exit
+    else
+        _error_log '没有定义sdk_download_url'
+        exit
+    fi
+fi
+ARG="build"
+_add_help $ARG "编译、安装、运行项目
+     $(basename $0) build debug 编译debug版本(默认)
+     $(basename $0) build release 编译release版本
+     "
+if [[ $1 = $ARG ]]; then
+    cd $WORK_PATH
+    _build_log "编译[$1]"
+    mod=${2:-debug}
+    if [[ $mod = 'release' ]]; then
+        gradle :app:assembleRelease > /dev/null
+    else
+        gradle :app:assembleDebug > /dev/null
+    fi
+    _start_activity $mod
+    _runtime_exit
+fi
+APP_KEY=./app/app.key
+if [[ -f $APP_KEY ]]; then
+    cd $WORK_PATH
+    ARG="sig"
+    _add_help $ARG "获取签名"
+    if [[ $1 = $ARG ]]; then
+        PASSWORD=`cat ./app/build.gradle|grep storePassword|sed 's/storePassword//'|sed 's/\"//g'|sed 's/^[[:space:]]*//g'`
+        _signature $APP_KEY $PASSWORD MD5
+        _signature $APP_KEY $PASSWORD SHA1
+        echo "\n参考网址：https://open.weixin.qq.com"
+        _runtime_exit
+    fi
+fi
+ARG="ule"
+_add_help $ARG "转换工程源文件为unix换行(Unix Line endings)"
+if [[ $1 = $ARG ]]; then
+    cd $WORK_PATH
+    FILES=`find -E . -regex ".*\.(php|java|gradle|xml)"`
+    for i in $FILES; do
+        if [[ -f $i ]]; then
+            cat $i|perl -p -e 's/\r\n/\n/g'|tr "\r" "\n" >${i}_
+            mv -f ${i}_ $i
+        fi
+    done
+    _runtime_exit
+fi
+ARG="sp"
+_add_help $ARG "获取排序去重后的uses-permission"
+if [[ $1 = $ARG ]]; then
+    cd $WORK_PATH
+    for i in $APP_MODULES; do
+        _build_log $i       
+        cat .${i}/src/main/AndroidManifest.xml|grep "uses-permission"|sort|uniq
+    done
+    _runtime_exit
+fi
+ARG="clean"
+_add_help $ARG "根据gradle lint结果清理没用的图片等资源"
+if [[ $1 = $ARG ]]; then
+    cd $WORK_PATH
+    dirs=$(find . -name 'build' -type d )
+    if [[ -n "$dirs" ]]; then
+        _build_log "删除build文件夹"
+        for i in $dirs; do
+            printf "$i\n"
+            _rm $i
+        done
+    fi
+    if _command_exist android-resource-remover; then
+        for i in $APP_MODULES; do
+            _build_log "清理$i"
+            android-resource-remover --xml .${i}/build/outputs/lint-results.xml >/dev/null
+        done    
+    fi
+    _runtime_exit
+fi
+_show_help

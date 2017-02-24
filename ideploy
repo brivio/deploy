@@ -85,6 +85,10 @@ _function_str(){
         shift
     done
 }
+_runtime_exit(){
+    _success_log "完成时间:$(_date)"
+    exit
+}
 _check_script_env(){
     check_cmd_error=""
     for i in $REQUIRE_COMMANDS; do
@@ -227,6 +231,13 @@ _rm(){
         fi
         shift
     done
+}
+_ln(){
+    if [[ $# < 2 ]]; then
+        return
+    fi
+    _rm $2
+    ln -s $1 $2
 }
 _rm_file(){
     for i in $(find . -name ".$1"); do
@@ -603,7 +614,7 @@ fi
 ARG="api"
 _add_help $ARG "集成apisdk"
 if [[ $1 = $ARG ]]; then
-    if [[ ! -z "$sdk_download_url" ]]; then        
+    if [[ -n "$sdk_download_url" ]]; then        
         _build_log "远程获取api sdk"
         [[ -f ./ios.zip ]]&&rm -rf ./ios.zip
         wget -q $sdk_download_url -O ./ios.zip
@@ -612,7 +623,7 @@ if [[ $1 = $ARG ]]; then
         [[ -f ./ios.zip ]]&&rm -rf ./ios.zip
         _build_log "生成ApiSDK"
         _create_xcodeproj
-        exit
+        _runtime_exit
     else
         _error_log '没有定义sdk_download_url'
         exit
@@ -627,7 +638,7 @@ if [[ $1 = $ARG ]]; then
     xcrun -sdk iphoneos packageapplication \
             -v $WORK_PATH/build/Release-iphoneos \
             -o $WORK_PATH/build/app-release.ipa >/dev/null
-    exit
+    _runtime_exit
 fi
 ARG="ule"
 _add_help $ARG "转换工程源文件为unix换行(Unix Line endings)"
@@ -638,27 +649,27 @@ if [[ $1 = $ARG ]]; then
             mv -f ${i}_ $i
         fi
     done
-    exit  
+    _runtime_exit  
 fi
 ARG="proj"
 _add_help $ARG "生成xcode工程文件夹"
 if [[ $1 = $ARG ]]; then
     _create_assets_header
     _create_xcodeproj
-    exit  
+    _runtime_exit  
 fi
 ARG="assets"
 _add_help $ARG "生成assets定义文件"
 if [[ $1 = $ARG ]]; then
     _create_assets_header
-    exit
+    _runtime_exit
 fi
 ARG="cleanup"
 _add_help $ARG "整理代码"
 if [[ $1 = $ARG ]]; then
     _build_log "删除头部版权信息"
     _remove_comments
-    exit
+    _runtime_exit
 fi
 _show_help
 __EXTRAL_BIN__
