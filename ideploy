@@ -1,0 +1,1299 @@
+#!/bin/bash
+#不要手动修改这个文件!
+_command_exist() {
+    type "$1" &> /dev/null
+}
+_setup_script_env(){
+    set -e
+    REQUIRE_COMMANDS="awk curl git grep openssl scp ssh unzip wget zip "
+    COLOR_RED="\033[31m"
+    COLOR_GREEN="\033[32m"
+    COLOR_YELLOW="\033[33m"
+    COLOR_BLUE="\033[34m"
+    COLOR_END="\033[0m"
+    HOME_PATH="$(cd ~;pwd)"
+    SCRIPT_PATH="$(cd $(dirname $0);pwd)"
+    WORK_PATH="$(pwd)"
+    SYSTEM_NAME="unknow"
+    case "$(uname)" in
+        Darwin)
+            SYSTEM_NAME="darwin"
+        ;;
+        CYGWIN*)
+            SYSTEM_NAME="cygwin"
+        ;;
+        Linux)
+            SYSTEM_NAME="linux"
+        ;;
+    esac
+}
+_check_darwin_gnu(){
+    if [[ $(uname) != 'Darwin' ]]; then
+        return
+    fi
+    if ! _command_exist brew; then
+        /usr/bin/ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"
+    fi    
+    local package=""
+    while [[ $# > 0 ]]; do
+        dir="/usr/local/opt/$1"
+        if [[ ! -d $dir ]]; then
+            package="$package $i"
+        fi
+        dir="$dir/libexec/gnubin"
+        if [[ -d $dir ]]; then
+            PATH="$dir:$PATH"
+        fi
+        shift
+    done
+    if [[ -n $package ]]; then
+        brew install $package
+    fi
+}
+_real_path(){
+    if [[ $SYSTEM_NAME = 'cygwin' ]]; then
+        cygpath -wp $1
+    else
+        echo $1
+    fi
+}
+_get_file_content(){
+    if [[ -f $1 ]]; then
+        cat $1
+    fi
+}
+_expr(){
+    awk "BEGIN{printf $1}"
+}
+_build_log(){
+    step=${step:=0}
+    step=$(_expr "$step + 1")
+    printf "\033[34m$step)、$1\033[0m\n"
+}
+_error_log(){
+    printf "\033[31m$1\033[0m\n"
+}
+_success_log(){
+    printf "\033[32m$1\033[0m\n"
+}
+_info_log(){
+    printf "\033[33m$1\033[0m\n"
+}
+_function_str(){
+    while [[ $# > 0 ]]; do
+        type $1|tail -n +2
+        shift
+    done
+}
+_check_script_env(){
+    check_cmd_error=""
+    for i in $REQUIRE_COMMANDS; do
+        if ! _command_exist $i ; then
+            check_cmd_error="$check_cmd_error${COLOR_RED}${i}${COLOR_END}不存在\n"
+        fi
+    done
+    if [[ -n $check_cmd_error ]]; then
+        printf "$check_cmd_error"
+        exit
+    fi
+}
+_kill(){
+    pid=$(pgrep -l $1|awk '{print $1}')
+    if [[ -n $pid ]]; then
+        sudo kill $pid
+    fi
+}
+_nohup(){
+    nohup $@ >/dev/null 2>&1 &
+}
+_pid_status(){
+    pid=$1
+    if [[ $pid -gt 0 ]]; then
+        if ps -p $pid >/dev/null ; then
+            return 0
+        else
+            return 1
+        fi
+    else
+        return 1
+    fi
+}
+_user_group(){
+    id -gn
+}
+_touch(){
+    if [[ $# > 0 ]]; then
+        touch $@
+    fi
+}
+_test_port() {
+    if netstat -an | egrep "[.:]$1 .*LISTEN" > /dev/null;then
+        return 0
+    else
+        return 1
+    fi
+}
+_date(){
+    if [[ $# -eq 0 ]]; then
+        date "+%Y-%m-%d %H:%M:%S"
+    else
+        date -d @$1 "+%Y-%m-%d %H:%M:%S"
+    fi
+}
+_date_raw(){
+    date "+%Y%m%d%H%M%S"
+}
+_strtotime(){
+    option=''
+    if [[ $# -eq 0 ]]; then
+        eval "date +%s"
+    else
+        eval "date -f '%Y-%m-%d %H:%M:%S' $1 +%s"
+    fi
+}
+_dl(){
+    cmd="wget -c -t 0 --content-disposition --no-check-certificate \"$1\" "
+    if [[ -n $2 ]]; then
+        cmd="$cmd -O $2"
+    fi
+    printf "\033[33m$cmd\033[0m\n"
+    eval "$cmd"
+}
+_scp(){
+    printf "${COLOR_YELLOW}scp -r -p $1 $HOSTNAME:$SERVER_PATH$2${COLOR_END}\n"
+    scp -r -p $1 $HOSTNAME:$SERVER_PATH$2
+}
+_ssh(){
+    ssh $HOSTNAME 'bash -s' "set -e \n $@"
+}
+_ls_git(){
+    find . -name ".git"
+}
+_rm_git(){
+    rm-file git
+}
+_git_init_push(){
+    git add .;git commit -m '代码初始化';git push origin master -f
+}
+_ls_files(){
+    if [[ -n $1 ]]; then
+        eval "find "$1" -type f 2>/dev/null|sort|uniq"
+    fi
+}
+_add_unstaged_file(){
+    if [[ -d ./.git ]]; then
+        files=$(_ls_files "$(git status -s|grep -E "^\?\?"|sed 's/^...//')")
+        _touch $files
+        if [[ -n $files ]]; then
+            git add $files 2>/dev/null
+        fi
+    fi
+}
+_get_uncommit_files(){
+    files=$(git status -s|grep -e "^R"|grep -o -e "->.*"|sed 's/^...//')
+    files="$files"$(git status -s|grep -v "^R"|sed 's/^...//')
+    echo "$files"
+}
+_touch_uncommit_files(){
+    if [[ -d ./.git ]]; then
+        _touch $(_ls_files "$(_get_uncommit_files)")
+    fi
+}
+_upper(){
+    echo "$1"|tr "[:lower:]" "[:upper:]"
+}
+_lower(){
+    echo "$1"|tr "[:upper:]" "[:lower:]"
+}
+_trim(){
+    echo "$1"|sed 's/ //g'
+}
+_length(){
+    echo $(echo "$1"|wc -c)
+}
+_sed_file(){
+    sed -i $1 $2
+}
+_remove_blank_lines(){
+  _sed_file '/^$/d' $1
+}
+_row_val(){
+    echo $(echo "$1"|grep -E "$2\s*:"|head -n1|awk 'BEGIN{NF=":"}{printf $2}')
+}
+_rm(){
+    while [[ $# > 0 ]]; do
+        if [[ -r $1 ]]; then
+            rm -rf $1
+        fi
+        shift
+    done
+}
+_rm_file(){
+    for i in $(find . -name ".$1"); do
+        rm -rf $i
+        echo "rm -rf $i"
+    done
+}
+_mkdir(){
+    while [[ $# > 0 ]]; do
+        if [[ ! -r $1 ]]; then
+            mkdir -p $1
+            chmod -R 777 $1
+        fi
+        shift
+    done
+}
+_get_opt(){
+    for i in $@; do
+        if [[ $i = $1 ]]; then
+            continue
+        fi
+        key=$(echo $i|grep -o -E '\-(.*)[=|[:space:]]'|sed 's/^--//g'|sed 's/^-//g'|sed 's/=$//g')
+        if [[ $key = $1 ]]; then
+            echo $(echo $i|grep -o -E '[=|[:space:]](.*)'|sed 's/^=//g')
+            break
+        fi
+    done
+}
+_cp(){
+  if [[ -f $2 ]]; then
+    rm -rf $2
+  fi
+  cp $1 $2
+}
+_shellc(){
+    local max_line
+    max_line=0
+    dist_bin=$2
+    if [[ -r $dist_bin ]]; then
+      rm -rf $dist_bin
+    fi
+    cat "$1" | while read line
+    do
+        res=$(_trim "$line")
+        if [[ ${res:0:1} = '.' || -z $res ]]; then
+          include_file=$(_trim ${res:1:$(_length $res)})
+          include_file=${include_file/\~/$HOME_PATH}
+          cat $include_file>>$dist_bin
+          printf "\n">>$dist_bin
+        else
+          echo $line>>$dist_bin
+        fi
+    done
+    _sed_file "s/^[[:space:]]*#.*//g" $dist_bin
+    _sed_file "s/^function[[:space:]]*//g" $dist_bin
+    _remove_blank_lines $dist_bin
+    sed -i -e "1i\\
+\#!/bin/bash\\
+\#不要手动修改这个文件!" $dist_bin
+}
+_x(){
+    local remove_archive
+    local success
+    local file_name
+    local extract_dir
+    if (( $# == 0 )); then
+        echo "Usage: extract [-option] [file ...]"
+        echo
+        echo Options:
+        echo "    -r, --remove    Remove archive."
+        echo
+        echo "Report bugs to <sorin.ionescu@gmail.com>."
+    fi
+    remove_archive=1
+    if [[ "$1" == "-r" ]] || [[ "$1" == "--remove" ]]; then
+        remove_archive=0
+        shift
+    fi
+    while (( $# > 0 )); do
+        if [[ ! -f "$1" ]]; then
+            echo "extract: '$1' is not a valid file" 1>&2
+            shift
+            continue
+        fi
+        success=0
+        file_name="$( basename "$1" )"
+        extract_dir="$( echo "$file_name" | sed "s/\.${1##*.}//g" )"
+        case "$1" in
+        (*.tar.gz|*.tgz)
+            [ -z $commands[pigz] ] && tar zxvf "$1" || pigz -dc "$1" | tar xv
+            ;;
+        (*.tar.bz2|*.tbz|*.tbz2)
+            tar xvjf "$1"
+            ;;
+        (*.tar.xz|*.txz)
+            tar --xz --help &> /dev/null \
+                && tar --xz -xvf "$1" \
+            || xzcat "$1" | tar xvf -
+            ;;
+        (*.tar.zma|*.tlz)
+            tar --lzma --help &> /dev/null \
+                && tar --lzma -xvf "$1" \
+            || lzcat "$1" | tar xvf -
+            ;;
+        (*.tar)
+            tar xvf "$1"
+            ;;
+        (*.gz)
+            [ -z $commands[pigz] ] && gunzip "$1" || pigz -d "$1"
+            ;;
+        (*.bz2)
+            bunzip2 "$1"
+            ;;
+        (*.xz)
+            unxz "$1"
+            ;;
+        (*.lzma)
+            unlzma "$1"
+            ;;
+        (*.Z)
+            uncompress "$1"
+            ;;
+        (*.zip|*.war|*.jar|*.sublime-package|*.ipsw|*.xpi|*.apk)
+            unzip "$1" -d $extract_dir
+            ;;
+        (*.rar)
+            unrar x -ad "$1"
+            ;;
+        (*.7z)
+            7za x "$1"
+            ;;
+        (*.deb)
+            mkdir -p "$extract_dir/control"
+            mkdir -p "$extract_dir/data"
+            cd "$extract_dir"; ar vx "../${1}" > /dev/null
+            cd control; tar xzvf ../control.tar.gz
+            cd ../data; tar xzvf ../data.tar.gz
+            cd ..; rm *.tar.gz debian-binary
+            cd ..
+            ;;
+        (*)
+            echo "extract: '$1' cannot be extracted" 1>&2
+            success=1
+            ;;
+        esac
+            (( success = $success > 0 ? $success : $? ))
+            (( $success == 0 )) && (( $remove_archive == 0 )) && rm "$1"
+        shift
+    done
+}
+_zip_file(){
+    start_time=$(date +%s.%N)
+    files=$2
+    total_row=$(echo $(echo "$files"|wc -l))
+    once_count=500
+    for (( i=1; i <= $total_row; i+=$once_count )); do
+        printf "$i/$total_row\r"
+        zip_files=$(echo "$files"|awk 'BEGIN{FS="\n"}NR=='$i',NR=='$(expr $i + $once_count - 1)'{printf "\"%s\" ",$1}')
+        eval "zip -q -r $1 $zip_files"
+    done
+    printf "$total_row/$total_row\r"
+    end_time=$(date +%s.%N)
+    executed_seconds=$(echo|awk "{printf \"%.3f\",$end_time-$start_time}")
+    printf "\033[33m耗时:${executed_seconds}s 大小："$(ls -lh $1|awk '{printf "%s(%s)",$5,$9}')"\033[0m\r\n"
+}
+_gen_rsa_key(){
+    private_key="./rsa_private_key.pem"
+    public_key="./rsa_public_key.pem"
+    pkcs8_file="./rsa_private_key_pkcs8.pem"
+    _build_log "生成私钥、公钥、pkcs8"
+    openssl genrsa -out $private_key 2048
+    openssl rsa -in $private_key -pubout -out $public_key
+    openssl pkcs8 -topk8 -inform PEM -in $private_key -outform PEM –nocrypt>$pkcs8_file
+}
+_sslc(){
+    openssl aes-128-cbc -salt -in $1 -out $1.aes && rm -f $1
+}
+_ssld(){
+    openssl aes-128-cbc -d -salt -in $1.aes -out $1 && rm -f $1.aes
+}
+_base64_encode(){
+    printf "$1"|openssl base64
+}
+_base64_decode(){
+    printf "$1"|openssl base64 -d
+}
+_md5(){
+    printf "$1"|openssl md5 -binary| xxd -p
+}
+_sha(){
+    printf "$1"|openssl sha -binary| xxd -p
+}
+_sha1(){
+    printf "$1"|openssl sha1 -binary| xxd -p
+}
+_gen_password(){
+    openssl rand 5 -base64
+}
+_local_ip(){
+    case $SYSTEM_NAME in
+        linux )
+            echo $(ifconfig eth0|awk -F'[:B]' '/inet addr/{print $2}')
+            ;;
+        darwin)
+            echo $(ifconfig en0|awk '/inet /{printf $2}')
+            ;;
+        cygwin)
+            echo $(ipconfig|grep 'IPv4'|head -n1|awk 'BEGIN{FS=":"}{printf "%s\n",$2}')
+            ;;
+    esac
+}
+_get_dns(){
+    cat /etc/resolv.conf|awk '$1=="nameserver"{printf "%s\n",$2}'
+}
+_add_system_info(){
+    printf '%-15s: %s\n' "$1" "$2"
+}
+_system_info(){
+    _add_system_info "System" $(uname)
+    case $(uname) in
+        Linux )
+            cpu_info=$(cat /proc/cpuinfo)
+            cpu_name=$(_row_val "$cpu_info" "model name")
+            _add_system_info "CPU" "$cpu_name"
+            mem_info=$(cat /proc/meminfo)
+            mem_total=$(expr $(_row_val "$mem_info" "MemTotal"|awk '{printf $1}') / 1024 )
+            mem_available=$(expr $(_row_val "$mem_info" "MemAvailable"|awk '{printf $1}') / 1024)
+            _add_system_info "Memory" "共${mem_total}M 可用${mem_available}M"
+            disk_info=$(df -h)
+            _add_system_info "Disk" "$(df -h|awk 'NR==2{printf "共%s 可用%s",$2,$4}')"
+            ;;
+        Darwin)
+            echo 'mac'
+            ;;
+    esac
+}
+_install_package(){
+    while [[ $# > 0 ]]; do
+        if ! type $1 &>/dev/null; then
+            if type yum &>/dev/null; then
+                yum install -y $1
+            elif type apt-get &>/dev/null; then
+                apt-get install $1
+            elif type brew &>/dev/null; then
+                brew install $1
+            fi
+        fi
+        shift
+    done
+}
+_progress_bar(){
+    let _progress=(${1}*100/${2}*100)/100
+    let _done=(${_progress}*4)/10
+    let _left=40-$_done
+    _fill=$(printf "%${_done}s")
+    _empty=$(printf "%${_left}s")
+    printf "\rProgress : [${_fill// /#}${_empty// /-}] ${_progress}%%"
+}
+_add_help(){
+    HELP_TITLE_MAX_LENGTH=${HELP_TITLE_MAX_LENGTH-0}
+    if [[ $HELP_TITLE_MAX_LENGTH -lt ${#1} ]]; then
+        HELP_TITLE_MAX_LENGTH=${#1}
+    fi
+    HELP_INDEX=${HELP_INDEX-0}
+    HELP_TITLE[$HELP_INDEX]="$1"
+    HELP_CONTENT[$HELP_INDEX]="$2"
+    HELP_INDEX=$(_expr "$HELP_INDEX+1")
+}
+_show_help(){
+    content="选项:\n"
+    for (( i = 0; i <= $HELP_INDEX; i++ )); do
+        content="$content$(printf "\t$COLOR_BLUE%-${HELP_TITLE_MAX_LENGTH}s$COLOR_END" "${HELP_TITLE[$i]}")"
+        
+        info="$(printf "${HELP_CONTENT[$i]}"|awk "BEGIN{FS=\"\n\"}NR==1{printf \"%s\n\",\$1}")"
+        content="$content$info\n" 
+        info="$(printf "${HELP_CONTENT[$i]}"|awk "BEGIN{FS=\"\n\"}NR>1{printf \"%-${HELP_TITLE_MAX_LENGTH}s\t%s\n\",\"\",\$1}")"
+        if [[ -n $info ]]; then
+            content="$content$COLOR_YELLOW$info$COLOR_END\n"
+        fi
+    done
+    printf "$content"
+    exit
+}
+_extract_bin(){
+    local line=$(cat $0|grep -En '^__EXTRAL_BIN__$'|awk 'BEGIN{FS=":"}{printf "%s\n",$1+1}')
+    if [[ -n $line ]]; then
+        cat $0|tail -n +$line>$1
+    fi
+    
+}
+_runtime_init(){
+    _setup_script_env
+    _check_darwin_gnu coreutils findutils md5sha1sum gnu-sed
+}
+_runtime_init
+_deploy_init(){
+    REQUIRE_COMMANDS="$REQUIRE_COMMANDS ruby pod xcodebuild xcrun "
+    _check_script_env
+    TEMP_DIR=/tmp/ideploy
+    _mkdir $TEMP_DIR
+    CONFIG='./deploy.config'
+    if [[ -f $CONFIG ]]; then
+        source $CONFIG
+    else
+        _error_log "缺少${CONFIG}配置文件"
+        exit
+    fi
+    if [[ ! -d ./source ]]; then
+        _error_log "./source 目录不存在!"
+        exit
+    fi
+    if [[ ! -f ./source/PrefixHeader.pch ]]; then
+        cat > ./source/PrefixHeader.pch <<EOF
+EOF
+    fi
+    if [[ $(basename $0) = 'ideploy' ]]; then
+        ruby_script_path=$TEMP_DIR/project.rb
+        _extract_bin $ruby_script_path    
+    else
+        ruby_script_path=$SCRIPT_PATH/ios/project.rb
+    fi
+}
+_create_xcodeproj(){
+    _build_log "生成xcodeproj"
+    ruby $ruby_script_path
+    if [[ -f ./Podfile ]]; then
+        _build_log "集成pod"
+        pod install --no-repo-update
+    fi
+}
+_safe_name(){
+    name=$1
+    name=${name%.*}
+    name=${name//-/_}
+    name=${name//./_}
+    echo $name
+}
+_create_assets_header(){
+    out_file=./source/AssetCatalog.h
+    printf "//不要手动修改\n//图片声明文件,避免直接调用文件名\n">$out_file
+    for asset in $(find . -name '*.xcassets'); do
+        printf "#pragma mark $asset \n">>$out_file
+        for i in $(find $asset -name "*.imageset" |sort); do
+            file=$(basename $i)
+            printf "/*"$i"*/"\
+                 "\nstatic NSString *const IMG_"$(_safe_name $file)"=@\""${file//.imageset/}"\";\n" >>$out_file
+        done    
+    done
+    if [[ -d ./source/AssetCatalog/Images ]]; then
+        printf "#pragma mark Images\n">>$out_file
+        for i in $(find ./source/AssetCatalog/Images -name "*.png" ! -name "*@*.png"|sort); do
+            file=$(basename $i)
+            printf "/*"$i"*/"\
+                 "\nstatic NSString *const IMG_"$(_safe_name $file)"=@\""$file"\";\n" >>$out_file
+        done
+    fi
+}
+_remove_comments(){
+    files=$(grep -rlE 'Created by' ./source)
+    echo "$files"|while read line; do
+        echo $line
+        if [[ $(cat "$line"|grep -m 7 -nE "//.*"|awk 'BEGIN{FS=":"}{printf $1}') == '1234567' ]]; then
+            sed -i 1,7d "$line"
+            if [[ $(cat "$line"|head -n 1) == '' ]]; then
+                sed -i 1d "$line"
+            fi
+        fi
+    done
+}
+_deploy_init
+if [[ -f './deploy.extra.sh' ]]; then
+    source './deploy.extra.sh'
+fi
+ARG="api"
+_add_help $ARG "集成apisdk"
+if [[ $1 = $ARG ]]; then
+    if [[ ! -z "$sdk_download_url" ]]; then        
+        _build_log "远程获取api sdk"
+        [[ -f ./ios.zip ]]&&rm -rf ./ios.zip
+        wget -q $sdk_download_url -O ./ios.zip
+        [[ -d ./source/vendor/apiSDK ]]&&rm -rf ./source/vendor/apiSDK
+        unzip -q ./ios.zip -d ./source/vendor/apiSDK
+        [[ -f ./ios.zip ]]&&rm -rf ./ios.zip
+        _build_log "生成ApiSDK"
+        _create_xcodeproj
+        exit
+    else
+        _error_log '没有定义sdk_download_url'
+        exit
+    fi
+fi
+ARG="release"
+_add_help $ARG "生成正式版本,连接设备则安装运行"
+if [[ $1 = $ARG ]]; then
+    _build_log "编译[$1]"
+    xcodebuild build >/dev/null
+    _build_log "ipa打包[$1]"
+    xcrun -sdk iphoneos packageapplication \
+            -v $WORK_PATH/build/Release-iphoneos \
+            -o $WORK_PATH/build/app-release.ipa >/dev/null
+    exit
+fi
+ARG="ule"
+_add_help $ARG "转换工程源文件为unix换行(Unix Line endings)"
+if [[ $1 = $ARG ]]; then
+    for i in $(find -E . -regex ".*\.(php|m|h|xml)"); do
+        if [[ -f $i ]]; then
+            cat $i|perl -p -e 's/\r\n/\n/g'|tr "\r" "\n" >${i}_
+            mv -f ${i}_ $i
+        fi
+    done
+    exit  
+fi
+ARG="proj"
+_add_help $ARG "生成xcode工程文件夹"
+if [[ $1 = $ARG ]]; then
+    _create_assets_header
+    _create_xcodeproj
+    exit  
+fi
+ARG="assets"
+_add_help $ARG "生成assets定义文件"
+if [[ $1 = $ARG ]]; then
+    _create_assets_header
+    exit
+fi
+ARG="cleanup"
+_add_help $ARG "整理代码"
+if [[ $1 = $ARG ]]; then
+    _build_log "删除头部版权信息"
+    _remove_comments
+    exit
+fi
+_show_help
+__EXTRAL_BIN__
+#!/usr/bin/env ruby
+require 'pathname'
+require 'xcodeproj'
+require 'yaml'
+require 'pp'
+require 'json'
+require 'digest'
+require 'rexml/document'
+require 'active_support/core_ext/string'
+
+module APP
+    class Builder
+        def initialize(conf)
+            @config      = YAML::load(File.open(conf))
+            @project_name=@config['name']
+            @project_file='./'+@project_name+'.xcodeproj'
+            @source_dir  ='./source'
+            @path_prefix = Pathname.new(@source_dir).realdirpath.to_s
+
+            @products_dir      ='./Products'
+            @products_app      ="./Products/#{@project_name}.app"
+            @frameworks_dir    ='./Frameworks'
+            @frameworks_ios_dir='./Frameworks/IOS'
+
+            #文件列表初始化
+            @source_files      =[]
+            db_data            ='./db.data'
+            system "find #{@source_dir} \\
+                ! -name .DS_Store  \\
+                ! -name .svn \\
+                ! -name .git \\
+                ! -path '*.xcassets/*' \\
+                ! -path '*.bundle/*' \\
+                ! -path '*.framework/*' |sort >#{db_data}"
+
+            file=File.new(db_data, 'r')
+            while path=file.gets
+                @source_files.push path.to_s.strip
+            end
+            file.close
+            File.delete db_data
+
+            @objects        ={}
+            @json           ={
+                :rootObject     => get_uuid('PBXProject'),
+                :classes        => [],
+                :objectVersion  => 46,
+                :archiveVersion => 1,
+                :objects        => @objects,
+            }
+            @pbx_headers    =[]
+            @pbx_sources    =[]
+            @pbx_frameworks =[]
+            @pbx_resources  =[]
+
+            @framework_search_paths=['$(inherited)']
+            @library_search_paths  =['$(inherited)']
+        end
+
+        def run
+            create_pbx_ref
+            create_pbx_build_phase
+            create_pbx_project
+            create_pbx_native_target
+            create_pbx_configuration_list
+            convert_pbxproj
+            # scheme_install
+        end
+
+        def scheme_install
+            dir = @project_file+"/xcuserdata/"+ENV['LOGNAME']+".xcuserdatad/xcschemes"
+            unless File.exist? dir
+                system "mkdir -p #{dir}"
+            end
+            file_path=dir+"/"+@project_name+".xcscheme"
+            unless File.exist? file_path
+                content=get_scheme_tpl
+                file_put_contents(file_path, content.gsub('$(PROJECT_NAME)', @project_name))
+            end
+
+            doc =REXML::Document.new(File.new(file_path, 'r'))
+
+            doc.root.elements.delete_all '//PreActions'
+            doc.root.elements.delete_all '//PostActions'
+            pre_action_el                      =REXML::Element.new 'PreActions'
+            action_el                          =REXML::Element.new 'ExecutionAction'
+            action_el.attributes['ActionType'] ='Xcode.IDEStandardExecutionActionsCore.ExecutionActionType.ShellScriptAction'
+            content_el                         =REXML::Element.new 'ActionContent'
+            content_el.attributes['title']     ='Run Script'
+
+            content=<<eot
+buildNumber=$(/usr/libexec/PlistBuddy -c 'Print CFBundleVersion' $INFOPLIST_FILE)
+buildNumber=$(($buildNumber+1))
+/usr/libexec/PlistBuddy -c "Set :CFBundleVersion $buildNumber" $INFOPLIST_FILE
+eot
+            content                                        =content.html_safe
+            content                                        =content.gsub("\n", "$(LF)")
+            content_el.attributes['scriptText']            =content
+            env_build_el                                   =REXML::Element.new 'EnvironmentBuildable'
+            build_ref_el                                   =REXML::Element.new 'BuildableReference'
+            build_ref_el.attributes['BuildableIdentifier'] ='primary'
+            build_ref_el.attributes['BuildableName']       =@project_name+'.app'
+            build_ref_el.attributes['BlueprintName']       =@project_name
+            build_ref_el.attributes['ReferencedContainer'] ='container:%s.xcodeproj' %@project_name
+
+            env_build_el.add_element build_ref_el
+            content_el.add_element env_build_el
+            action_el.add_element content_el
+            pre_action_el.add_element action_el
+            doc.root.elements['//BuildAction'].add_element pre_action_el
+            file_put_contents(file_path, doc.to_s.gsub('$(LF)', '&#10;'))
+        end
+
+        # BuildPhase
+        def create_pbx_build_phase
+            @objects[get_uuid('PBXHeadersBuildPhase')]   ={
+                :isa                                => 'PBXHeadersBuildPhase',
+                :runOnlyForDeploymentPostprocessing => '0',
+                :files                              => @pbx_headers,
+                :buildActionMask                    => '2147483647',
+            }
+            @objects[get_uuid('PBXSourcesBuildPhase')]   ={
+                :isa                                => 'PBXSourcesBuildPhase',
+                :runOnlyForDeploymentPostprocessing => '0',
+                :files                              => @pbx_sources,
+                :buildActionMask                    => '2147483647',
+            }
+            @objects[get_uuid('PBXFrameworksBuildPhase')]={
+                :isa                                => 'PBXFrameworksBuildPhase',
+                :runOnlyForDeploymentPostprocessing => '0',
+                :files                              => @pbx_frameworks,
+                :buildActionMask                    => '2147483647',
+            }
+            if @config['dependencies']['framework']
+                @config['dependencies']['framework'].each { |framework|
+                    add_pbx_ref_dir(
+                        @frameworks_ios_dir+'/'+framework+'.framework',
+                        'Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS.sdk/System/Library/Frameworks/'+framework+'.framework')
+                }
+            end
+            if @config['dependencies']['dylib']
+                @config['dependencies']['dylib'].each { |framework|
+                    add_pbx_ref_file(@frameworks_dir+'/lib'+framework+'.dylib', '/usr/lib/lib'+framework+'.dylib');
+                }
+            end
+            if @config['dependencies']['tbd']
+                @config['dependencies']['tbd'].each { |framework|
+                    add_pbx_ref_file(@frameworks_dir+'/lib'+framework+'.tbd', '/usr/lib/lib'+framework+'.tbd');
+                }
+            end
+
+            @objects[get_uuid('PBXResourcesBuildPhase')] ={
+                :isa                                => 'PBXResourcesBuildPhase',
+                :runOnlyForDeploymentPostprocessing => '0',
+                :files                              => @pbx_resources,
+                :buildActionMask                    => '2147483647',
+            }
+        end
+
+        def create_pbx_ref
+            add_pbx_ref_dir('..')
+            add_pbx_ref_dir(@products_dir)
+            add_pbx_ref_file(@products_app)
+            add_pbx_ref_dir(@frameworks_dir)
+            add_pbx_ref_dir(@frameworks_ios_dir)
+
+            @source_files.each { |path|
+                add_pbx_ref(path)
+            }
+        end
+
+        def add_pbx_ref_file(path, pbx_path='')
+            add_pbx_ref(path, 'file', pbx_path)
+        end
+
+        def add_pbx_ref_dir(path, pbx_path='')
+            add_pbx_ref(path, 'directory', pbx_path)
+        end
+
+        def add_pbx_ref(path, ftype='', pbx_path='')
+            uuid            =get_uuid(path)
+            build_file_uuid =get_uuid(path+'_build_file')
+            file_ext        =File.extname(path)
+            file_name       =File.basename(path)
+            dir_name        =File.dirname(path)
+
+            if ftype.length==0
+                ftype=File.ftype(path)
+            end
+            if pbx_path.length==0
+                pbx_path=file_name
+            end
+
+            if %w(. Contents.json .DS_Store .gitignore .svn .git readme.txt).include?(file_name)
+                return
+            end
+
+            case ftype
+                when 'file'
+                    if %w(Contents.json .DS_Store .gitignore readme.txt).include?(file_name)
+                        return
+                    end
+                    if %w(.framework .xcassets .xcdatamodeld .bundle).include?(File.extname(File.dirname(path)))
+                        return
+                    end
+                    @objects[uuid] ={
+                        :sourceTree => '<group>',
+                        :isa        => 'PBXFileReference',
+                        :path       => pbx_path,
+                        :name       => file_name,
+                    }
+
+                    @objects[build_file_uuid]={
+                        :fileRef => uuid,
+                        :isa     => 'PBXBuildFile',
+                    }
+                    if @config['MRC_PATHS']
+                        if @config['MRC_PATHS'].include?(dir_name)
+                            @objects[build_file_uuid][:settings]={
+                                :COMPILER_FLAGS => '-fno-objc-arc',
+                            }
+                        end
+                    end
+
+                    if %w(.m .c .mm .cpp .cxx .swift ).include?(file_ext)
+                        @pbx_sources.push(build_file_uuid)
+                    elsif %w(.h).include?(file_ext)
+                        @pbx_headers.push(build_file_uuid)
+                    elsif %w(.a .dylib).include?(file_ext)
+                        @pbx_frameworks.push(build_file_uuid)
+
+                        search_path= '$(SRCROOT)'+dir_name[2, dir_name.to_s.length-1]
+                        unless @library_search_paths.include? search_path
+                            @library_search_paths.push search_path
+                        end
+                    else
+                        unless %w(.app).include? file_ext
+                            @pbx_resources.push(build_file_uuid)
+                        end
+                    end
+                when 'directory'
+                    if %w(.framework .xcassets .xcdatamodeld .bundle).include?(file_ext)
+                        @objects[uuid]           ={
+                            :sourceTree => '<group>',
+                            :isa        => 'PBXFileReference',
+                            :path       => pbx_path,
+                            :name       => file_name,
+                        }
+                        @objects[build_file_uuid]={
+                            :fileRef => uuid,
+                            :isa     => 'PBXBuildFile',
+                        }
+                        if %w(.framework).include?(file_ext)
+                            @pbx_frameworks.push(build_file_uuid)
+
+                            search_path= '$(SRCROOT)'+dir_name[2, dir_name.to_s.length-1]
+                            unless @framework_search_paths.include? search_path
+                                @framework_search_paths.push search_path
+                            end
+                        elsif %w(.xcassets .xcdatamodeld .bundle).include?(file_ext)
+                            @pbx_resources.push(build_file_uuid)
+                        end
+                    else
+                        @objects[uuid]={
+                            :sourceTree => '<group>',
+                            :isa        => 'PBXGroup',
+                            :path       => pbx_path,
+                            :name       => file_name,
+                            :children   => [],
+                        }
+                    end
+
+                else
+            end
+            unless %w(.).include?(dir_name)
+                if @objects[get_uuid(dir_name)][:children]!=nil
+                    @objects[get_uuid(dir_name)][:children].push(uuid)
+                end
+            end
+        end
+
+        # PBXProject
+        def create_pbx_project
+            @objects[get_uuid('PBXProject')]             ={
+                :buildConfigurationList => get_uuid('XCConfigurationList'),
+                :targets                => [get_uuid('PBXNativeTarget')],
+                :developmentRegion      => 'English',
+                :knownRegions           => %w(en Base),
+                :isa                    => 'PBXProject',
+                :compatibilityVersion   => 'Xcode 3.2',
+                :productRefGroup        => get_uuid(@products_dir),
+                :projectDirPath         => '',
+                :attributes             => {
+                    :LastUpgradeCheck => '0710',
+                    :TargetAttributes => {
+                        get_uuid('PBXNativeTarget') => {
+                            :CreatedOnToolsVersion => '7.1',
+                        },
+                        :ORGANIZATIONNAME           => 'Brivio Wang',
+                    }
+                },
+                :hasScannedForEncodings => '0',
+                :projectRoot            => '',
+                :mainGroup              => get_uuid(File.dirname(@source_dir)),
+            }
+            # mainGroup
+            @objects[get_uuid(File.dirname(@source_dir))]={
+                :sourceTree => '<group>',
+                :isa        => 'PBXGroup',
+                :children   => [
+                    get_uuid(@source_dir),
+                    get_uuid(@products_dir),
+                    get_uuid(@frameworks_dir),
+                ],
+            }
+        end
+
+        # PBXNativeTarget
+        def create_pbx_native_target
+            @objects[get_uuid('PBXNativeTarget')]                ={
+                :buildConfigurationList => get_uuid('PBXNativeTarget_config_list'),
+                :productReference       => get_uuid(@products_app),
+                :productType            => 'com.apple.product-type.application',
+                :productName            => @project_name,
+                :isa                    => 'PBXNativeTarget',
+                :buildPhases            => [
+                    get_uuid('PBXHeadersBuildPhase'),
+                    get_uuid('PBXSourcesBuildPhase'),
+                    get_uuid('PBXFrameworksBuildPhase'),
+                    get_uuid('PBXResourcesBuildPhase'),
+                ],
+                :dependencies           => [],
+                :name                   => @project_name,
+                :buildRules             => []
+            }
+            @objects[get_uuid('PBXNativeTarget_config_list')]    ={
+                :isa                           => 'XCConfigurationList',
+                :defaultConfigurationIsVisible => '0',
+                :defaultConfigurationName      => 'Release',
+                :buildConfigurations           => [
+                    get_uuid('PBXNativeTarget_config_debug'),
+                    get_uuid('PBXNativeTarget_config_release')
+                ],
+            }
+            # XCBuildConfiguration debug
+            @objects[get_uuid('PBXNativeTarget_config_debug')]   = {
+                :isa           => 'XCBuildConfiguration',
+                :name          => 'Debug',
+                :buildSettings => {},
+            }
+            # XCBuildConfiguration release
+            @objects[get_uuid('PBXNativeTarget_config_release')] = {
+                :isa           => 'XCBuildConfiguration',
+                :name          => 'Release',
+                :buildSettings => {},
+            }
+
+            #先加载原有的配置，避免原有配置被覆盖
+            if File.exist? @project_file
+                _project_json=@project_file+'/project.json'
+                `plutil -convert json -o - #{@project_file}/project.pbxproj>#{_project_json}`
+
+                _old_config  =JSON.parse(File.open(_project_json, 'r').read)
+                _old_objects =_old_config['objects']
+                _old_objects[_old_objects[_old_objects[_old_config['rootObject']]['targets'][0]]['buildConfigurationList']]['buildConfigurations'].each { |setting_id|
+                    _old_objects[setting_id]['buildSettings'].each_key { |key|
+                        if _old_objects[setting_id]['name']=='Debug'
+                            set_debug_setting(key, _old_objects[setting_id]['buildSettings'][key])
+                        else
+                            set_release_setting(key, _old_objects[setting_id]['buildSettings'][key])
+                        end
+                    }
+                }
+                File.delete _project_json
+            end
+
+            default_config ={
+                :FRAMEWORK_SEARCH_PATHS                 => @framework_search_paths,
+                :LIBRARY_SEARCH_PATHS                   => @library_search_paths,
+                :ASSETCATALOG_COMPILER_LAUNCHIMAGE_NAME => 'LaunchImage',
+                :ASSETCATALOG_COMPILER_APPICON_NAME     => 'AppIcon',
+                :IPHONEOS_DEPLOYMENT_TARGET             => '8.0',
+                :ALWAYS_SEARCH_USER_PATHS               => 'YES',
+                :CLANG_CXX_LANGUAGE_STANDARD            => 'gnu++0x',
+                :CLANG_CXX_LIBRARY                      => 'libc++',
+                :CLANG_ENABLE_MODULES                   => 'YES',
+                :CLANG_ENABLE_OBJC_ARC                  => 'YES',
+                :CLANG_WARN_BOOL_CONVERSION             => 'YES',
+                :CLANG_WARN_CONSTANT_CONVERSION         => 'YES',
+                :CLANG_WARN_DIRECT_OBJC_ISA_USAGE       => 'YES_ERROR',
+                :CLANG_WARN_UNREACHABLE_CODE            => 'YES',
+                :CLANG_WARN__DUPLICATE_METHOD_MATCH     => 'YES',
+                :COPY_PHASE_STRIP                       => 'NO',
+                :ENABLE_STRICT_OBJC_MSGSEND             => 'YES',
+                :GCC_C_LANGUAGE_STANDARD                => 'gnu99',
+                :GCC_DYNAMIC_NO_PIC                     => 'NO',
+                :GCC_SYMBOLS_PRIVATE_EXTERN             => 'NO',
+                :GCC_WARN_64_TO_32_BIT_CONVERSION       => 'YES',
+                :GCC_WARN_ABOUT_RETURN_TYPE             => 'YES_ERROR',
+                :GCC_WARN_UNDECLARED_SELECTOR           => 'YES',
+                :GCC_WARN_UNINITIALIZED_AUTOS           => 'YES_AGGRESSIVE',
+                :GCC_WARN_UNUSED_FUNCTION               => 'YES',
+                :MTL_ENABLE_DEBUG_INFO                  => 'YES',
+                :SDKROOT                                => 'iphoneos',
+                :TARGETED_DEVICE_FAMILY                 => '1',
+                :GCC_PRECOMPILE_PREFIX_HEADER           => 'YES',
+                :ENABLE_BITCODE                         => 'NO',
+                :ONLY_ACTIVE_ARCH                       => { :debug.to_s => 'YES', :release.to_s => 'NO' },
+                :GCC_OPTIMIZATION_LEVEL                 => { :debug.to_s => '0', :release.to_s => 's' },
+                :GCC_PREPROCESSOR_DEFINITIONS           => { :debug.to_s => '$(inherited) DEBUG=1', :release.to_s => '$(inherited)' },
+                :PRODUCT_NAME                           => @project_name,
+            }
+
+            _entitlements_file ='../'+@project_name+'.entitlements'
+            if File.exist?(_entitlements_file)
+                add_pbx_ref(_entitlements_file)
+                default_config[:CODE_SIGN_ENTITLEMENTS]=@project_name+'.entitlements'
+            end
+
+            res =default_config.merge @config['buildConfiguration']
+            res.each_key { |key|
+                if res[key].kind_of? Hash
+                    set_debug_setting(key, res[key]['debug'])
+                    set_release_setting(key, res[key]['release'])
+                else
+                    set_debug_setting(key, res[key])
+                    set_release_setting(key, res[key])
+                end
+            }
+        end
+
+        def create_pbx_configuration_list
+            # XCConfigurationList
+            @objects[get_uuid('XCConfigurationList')]          ={
+                :isa                           => 'XCConfigurationList',
+                :defaultConfigurationIsVisible => '0',
+                :defaultConfigurationName      => 'Release',
+                :buildConfigurations           => [
+                    get_uuid('XCBuildConfiguration_debug'),
+                    get_uuid('XCBuildConfiguration_release')
+                ],
+            }
+            # XCBuildConfiguration debug
+            @objects[get_uuid('XCBuildConfiguration_debug')]   = {
+                :isa           => 'XCBuildConfiguration',
+                :name          => 'Debug',
+                :buildSettings => {},
+            }
+            # XCBuildConfiguration release
+            @objects[get_uuid('XCBuildConfiguration_release')] = {
+                :isa           => 'XCBuildConfiguration',
+                :name          => 'Release',
+                :buildSettings => {},
+            }
+        end
+
+        def set_debug_setting(key, val)
+            if val!=nil
+                @objects[get_uuid('PBXNativeTarget_config_debug')][:buildSettings][key]=val
+            end
+        end
+
+        def set_release_setting(key, val)
+            if val!=nil
+                @objects[get_uuid('PBXNativeTarget_config_release')][:buildSettings][key]=val
+            end
+
+        end
+
+        def convert_pbxproj
+            unless File.exist? @project_file
+                Xcodeproj::Project.new(@project_file).save
+            end
+
+            @temp_proj="#{@project_file}/temp.xcodeproj"
+            Xcodeproj::Project.new(@temp_proj).save
+
+            file_put_contents("#{@temp_proj}/project.json", JSON.pretty_generate(@json))
+            `plutil -convert xml1 -o - #{@temp_proj}/project.json>#{@temp_proj}/project2.pbxproj`
+            File.delete "#{@temp_proj}/project.json"
+            File.delete "#{@temp_proj}/project.pbxproj"
+            File.rename("#{@temp_proj}/project2.pbxproj", "#{@temp_proj}/project.pbxproj")
+            project=Xcodeproj::Project.open(@temp_proj)
+            project.save
+            `cp #{@temp_proj}/project.pbxproj #{@project_file}/project.pbxproj`
+            `rm -rf #{@temp_proj}`
+        end
+
+        def pod_install
+            pods_dir='../Pods'
+            add_pbx_ref_dir(pods_dir)
+            add_pbx_ref_file(pods_dir+'/Pods.debug.xcconfig', 'Pods/Target Support Files/Pods/Pods.debug.xcconfig')
+            @objects[get_uuid('PBXNativeTarget_config_debug')][:baseConfigurationReference]=get_uuid(pods_dir+'/Pods.debug.xcconfig')
+
+            add_pbx_ref_file(pods_dir+'/Pods.release.xcconfig', 'Pods/Target Support Files/Pods/Pods.release.xcconfig')
+            @objects[get_uuid('PBXNativeTarget_config_release')][:baseConfigurationReference]=get_uuid(pods_dir+'/Pods.release.xcconfig')
+
+        end
+
+        def get_uuid(str)
+            Digest::MD5.hexdigest(str).to_s[4..27]
+        end
+
+        def get_file_type(path)
+            file_ext=File.extname(path)
+            case file_ext
+                when '.bundle'
+                    'wrapper.plug-in'
+                when '.framework'
+                    'wrapper.framework'
+                else
+                    return 'file'
+            end
+        end
+
+        def file_put_contents(path, content)
+            file=File.new(path, 'w')
+            file.puts content
+            file.close
+        end
+
+        def file_get_contents(path)
+            result=""
+            file  =File.open(path, 'r')
+            while line=file.gets
+                result+=line
+            end
+            result
+        end
+
+        def get_scheme_tpl
+            content=<<eot
+<?xml version="1.0" encoding="UTF-8"?>
+<Scheme
+   LastUpgradeVersion = "0710"
+   version = "1.3">
+   <BuildAction
+      parallelizeBuildables = "YES"
+      buildImplicitDependencies = "YES">
+      <BuildActionEntries>
+         <BuildActionEntry
+            buildForTesting = "YES"
+            buildForRunning = "YES"
+            buildForProfiling = "YES"
+            buildForArchiving = "YES"
+            buildForAnalyzing = "YES">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "b80239c4607964aceb9a808d"
+               BuildableName = "$(PROJECT_NAME).app"
+               BlueprintName = "$(PROJECT_NAME)"
+               ReferencedContainer = "container:$(PROJECT_NAME).xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
+      </BuildActionEntries>
+   </BuildAction>
+   <TestAction
+      buildConfiguration = "Debug"
+      selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB"
+      selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
+      shouldUseLaunchSchemeArgsEnv = "YES">
+      <Testables>
+      </Testables>
+      <MacroExpansion>
+         <BuildableReference
+            BuildableIdentifier = "primary"
+            BlueprintIdentifier = "b80239c4607964aceb9a808d"
+            BuildableName = "$(PROJECT_NAME).app"
+            BlueprintName = "$(PROJECT_NAME)"
+            ReferencedContainer = "container:$(PROJECT_NAME).xcodeproj">
+         </BuildableReference>
+      </MacroExpansion>
+      <AdditionalOptions>
+      </AdditionalOptions>
+   </TestAction>
+   <LaunchAction
+      buildConfiguration = "Debug"
+      selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB"
+      selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
+      launchStyle = "0"
+      useCustomWorkingDirectory = "NO"
+      ignoresPersistentStateOnLaunch = "NO"
+      debugDocumentVersioning = "YES"
+      debugServiceExtension = "internal"
+      allowLocationSimulation = "YES">
+      <BuildableProductRunnable
+         runnableDebuggingMode = "0">
+         <BuildableReference
+            BuildableIdentifier = "primary"
+            BlueprintIdentifier = "b80239c4607964aceb9a808d"
+            BuildableName = "$(PROJECT_NAME).app"
+            BlueprintName = "$(PROJECT_NAME)"
+            ReferencedContainer = "container:$(PROJECT_NAME).xcodeproj">
+         </BuildableReference>
+      </BuildableProductRunnable>
+      <AdditionalOptions>
+      </AdditionalOptions>
+   </LaunchAction>
+   <ProfileAction
+      buildConfiguration = "Release"
+      shouldUseLaunchSchemeArgsEnv = "YES"
+      savedToolIdentifier = ""
+      useCustomWorkingDirectory = "NO"
+      debugDocumentVersioning = "YES">
+      <BuildableProductRunnable
+         runnableDebuggingMode = "0">
+         <BuildableReference
+            BuildableIdentifier = "primary"
+            BlueprintIdentifier = "b80239c4607964aceb9a808d"
+            BuildableName = "$(PROJECT_NAME).app"
+            BlueprintName = "$(PROJECT_NAME)"
+            ReferencedContainer = "container:$(PROJECT_NAME).xcodeproj">
+         </BuildableReference>
+      </BuildableProductRunnable>
+   </ProfileAction>
+   <AnalyzeAction
+      buildConfiguration = "Debug">
+   </AnalyzeAction>
+   <ArchiveAction
+      buildConfiguration = "Release"
+      revealArchiveInOrganizer = "YES">
+   </ArchiveAction>
+</Scheme>
+eot
+        end
+    end
+end
+
+config_files=['./project.config.yaml', './scripts/project.config.yaml']
+config_files.each { |path|
+    if File.exist? path
+        APP::Builder.new(ARGV.length==0 ? path : ARGV[0]).run
+        exit
+    end
+}
