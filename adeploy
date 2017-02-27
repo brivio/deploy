@@ -38,7 +38,7 @@ _check_darwin_gnu(){
     while [[ $# > 0 ]]; do
         dir="/usr/local/opt/$1"
         if [[ ! -d $dir ]]; then
-            package="$package $i"
+            package="$package $1"
         fi
         dir="$dir/libexec/gnubin"
         if [[ -d $dir ]]; then
