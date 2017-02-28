@@ -688,7 +688,6 @@ module APP
             @project_name=@config['name']
             @project_file='./'+@project_name+'.xcodeproj'
             @source_dir  ='./source'
-            @path_prefix = Pathname.new(@source_dir).realdirpath.to_s
 
             @products_dir      ='./Products'
             @products_app      ="./Products/#{@project_name}.app"
@@ -902,7 +901,7 @@ eot
                     elsif %w(.a .dylib).include?(file_ext)
                         @pbx_frameworks.push(build_file_uuid)
 
-                        search_path= '$(SRCROOT)'+dir_name[2, dir_name.to_s.length-1]
+                        search_path= '$(SRCROOT)/'+dir_name[2, dir_name.to_s.length-1]
                         unless @library_search_paths.include? search_path
                             @library_search_paths.push search_path
                         end
@@ -926,7 +925,7 @@ eot
                         if %w(.framework).include?(file_ext)
                             @pbx_frameworks.push(build_file_uuid)
 
-                            search_path= '$(SRCROOT)'+dir_name[2, dir_name.to_s.length-1]
+                            search_path= '$(SRCROOT)/'+dir_name[2, dir_name.to_s.length-1]
                             unless @framework_search_paths.include? search_path
                                 @framework_search_paths.push search_path
                             end
