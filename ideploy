@@ -582,16 +582,14 @@ _create_assets_header(){
         printf "#pragma mark $asset \n">>$out_file
         for i in $(find $asset -name "*.imageset" |sort); do
             file=$(basename $i)
-            printf "/*"$i"*/"\
-                 "\nstatic NSString *const IMG_"$(_safe_name $file)"=@\""${file//.imageset/}"\";\n" >>$out_file
+            printf "/*"$i"*/\nstatic NSString *const IMG_"$(_safe_name $file)"=@\""${file//.imageset/}"\";\n" >>$out_file
         done    
     done
     if [[ -d ./source/AssetCatalog/Images ]]; then
         printf "#pragma mark Images\n">>$out_file
         for i in $(find ./source/AssetCatalog/Images -name "*.png" ! -name "*@*.png"|sort); do
             file=$(basename $i)
-            printf "/*"$i"*/"\
-                 "\nstatic NSString *const IMG_"$(_safe_name $file)"=@\""$file"\";\n" >>$out_file
+            printf "/*"$i"*/\nstatic NSString *const IMG_"$(_safe_name $file)"=@\""$file"\";\n" >>$out_file
         done
     fi
 }
