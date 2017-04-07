@@ -519,7 +519,9 @@ _show_help(){
         fi
     done
     printf "$content"
-    exit
+    if [[ $# = 0 ]]; then
+        exit
+    fi
 }
 _extract_bin(){
     local line=$(cat $0|grep -En '^__EXTRAL_BIN__$'|awk 'BEGIN{FS=":"}{printf "%s\n",$1+1}')
