@@ -671,6 +671,27 @@ if [[ $1 = $ARG ]]; then
     _remove_comments
     _runtime_exit
 fi
+ARG="git-init"
+_add_help $ARG "git初始化"
+if [[ $1 = $ARG ]]; then
+    _build_log "检查.git"
+    if [[ ! -d ./.git ]]; then
+        git init
+    fi
+    _build_log "检查.gitignore"
+    if [[ ! -f ./.gitignore ]]; then
+        cat > ./.gitignore <<EOF
+.*
+DerivedData/
+Pods/
+PodsDev/
+Podfile.lock
+*.xcworkspace
+*.xcodeproj
+EOF
+    fi
+    _runtime_exit
+fi
 _show_help
 __EXTRAL_BIN__
 #!/usr/bin/env ruby

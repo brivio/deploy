@@ -546,6 +546,7 @@ _deploy_init(){
 sdk_download_url=
 EOF
     fi
+    source $CONFIG
     APP_MODULES=$(cat ./settings.gradle|grep -o -e "\'.*\'"|sed "s/\'//g"|sed "s/\"//g"|sed "s/\:/\//g")
 }
 _device_exist(){
@@ -577,13 +578,13 @@ _start_activity(){
     cp $APK $DIST_PATH/${APP_NAME}-${1}.apk
 }
 _signature(){
-    echo $3'值:'
-    keytool -list -v -keystore $1 -storepass $2 \
-        |grep $3 \
+    echo $1'值:'
+    keytool -list -v -keystore $key_file -storepass $key_password \
+        |grep $1 \
         |sed 's/://g' \
-        |sed "s/$3//" \
+        |sed "s/$1//" \
         |sed 's/^[[:space:]]*//g' \
-        |tr [A-Z] [a-z]
+        |tr '[A-Z]' '[a-z]'
 }
 _require(){
     if ! which $1>/dev/null ; then
@@ -591,18 +592,25 @@ _require(){
         echo "详见:$2"
     fi
 }
+_deploy_init
+if [[ -f './deploy.extra.sh' ]]; then
+    source './deploy.extra.sh'
+fi
 ARG="api"
 _add_help $ARG "生成ApiSDK"
 if [[ $1 = $ARG ]]; then
     cd $WORK_PATH
     if [[ -n "$sdk_download_url" ]]; then
+        if [[ -z "$sdk_dir" ]]; then
+            $sdk_dir=./Api-SDK
+        fi
+        local_zip='./android.zip'
         _build_log "远程获取api sdk"
-        [[ -f ./android.zip ]]&&rm -rf ./android.zip
-        wget -q $sdk_download_url -O ./android.zip
-        [[ -d ./third_party/Api-SDK ]]&&rm -rf ./third_party/Api-SDK
-        unzip -q ./android.zip -d ./third_party/
-        mv ./third_party/android ./third_party/Api-SDK
-        [[ -f ./android.zip ]]&&rm -rf ./android.zip
+        [[ -f $local_zip ]]&&rm -rf $local_zip
+        wget -q $sdk_download_url -O $local_zip
+        [[ -d $sdk_dir ]]&&rm -rf $sdk_dir
+        unzip -q $local_zip -d $sdk_dir
+        [[ -f $local_zip ]]&&rm -rf $local_zip
         printf "集成完成\n"
         _runtime_exit
     else
@@ -627,16 +635,14 @@ if [[ $1 = $ARG ]]; then
     _start_activity $mod
     _runtime_exit
 fi
-APP_KEY=./app/app.key
-if [[ -f $APP_KEY ]]; then
+if [[ -n $key_file ]]; then
     cd $WORK_PATH
     ARG="sig"
     _add_help $ARG "获取签名"
     if [[ $1 = $ARG ]]; then
-        PASSWORD=`cat ./app/build.gradle|grep storePassword|sed 's/storePassword//'|sed 's/\"//g'|sed 's/^[[:space:]]*//g'`
-        _signature $APP_KEY $PASSWORD MD5
-        _signature $APP_KEY $PASSWORD SHA1
-        echo "\n参考网址：https://open.weixin.qq.com"
+        _signature 'MD5'
+        _signature 'SHA1'
+        printf "\n参考网址：https://open.weixin.qq.com\n"
         _runtime_exit
     fi
 fi
@@ -680,6 +686,39 @@ if [[ $1 = $ARG ]]; then
             _build_log "清理$i"
             android-resource-remover --xml .${i}/build/outputs/lint-results.xml >/dev/null
         done    
+    fi
+    _runtime_exit
+fi
+ARG="dump-screen"
+_add_help $ARG "截屏并获取xml"
+if [[ $1 = $ARG ]]; then
+    num=$(adb devices|grep 'device$'|wc -l)
+    if [[ $num = "0" ]]; then
+        _error_log "没有设备连接"
+        _runtime_exit
+    fi
+    _build_log "截屏并获取xml"
+    f=/data/local/tmp/uidump.xml
+    
+    adb shell uiautomator dump $f
+    adb pull $f ./uidump.origin.xml
+    tidy -utf8 -xml -q --show-errors 0 --show-warnings 0 -i --indent-attributes 1 ./uidump.origin.xml>./uidump.xml
+    _runtime_exit
+fi
+ARG="git-init"
+_add_help $ARG "git初始化"
+if [[ $1 = $ARG ]]; then
+    _build_log "检查.git"
+    if [[ ! -d ./.git ]]; then
+        git init
+    fi
+    _build_log "检查.gitignore"
+    if [[ ! -f ./.gitignore ]]; then
+        cat > ./.gitignore <<EOF
+.*
+build/
+*.iml
+EOF
     fi
     _runtime_exit
 fi
