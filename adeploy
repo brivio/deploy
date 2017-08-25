@@ -705,8 +705,8 @@ if [[ $1 = $ARG ]]; then
     tidy -utf8 -xml -q --show-errors 0 --show-warnings 0 -i --indent-attributes 1 ./uidump.origin.xml>./uidump.xml
     _runtime_exit
 fi
-ARG="git-init"
-_add_help $ARG "git初始化"
+ARG="init"
+_add_help $ARG "初始化"
 if [[ $1 = $ARG ]]; then
     _build_log "检查.git"
     if [[ ! -d ./.git ]]; then
