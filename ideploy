@@ -617,6 +617,7 @@ if [[ $1 = $ARG ]]; then
     if [[ -n "$sdk_download_url" ]]; then        
         _build_log "远程获取api sdk"
         [[ -f ./ios.zip ]]&&rm -rf ./ios.zip
+        printf "wget -q $sdk_download_url -O ./ios.zip\n"
         wget -q $sdk_download_url -O ./ios.zip
         [[ -d ./source/vendor/apiSDK ]]&&rm -rf ./source/vendor/apiSDK
         unzip -q ./ios.zip -d ./source/vendor/apiSDK
@@ -1104,6 +1105,7 @@ eot
                 :GCC_OPTIMIZATION_LEVEL                 => { :debug.to_s => '0', :release.to_s => 's' },
                 :GCC_PREPROCESSOR_DEFINITIONS           => { :debug.to_s => '$(inherited) DEBUG=1', :release.to_s => '$(inherited)' },
                 :PRODUCT_NAME                           => @project_name,
+                :SWIFT_VERSION                           => '3.0',
             }
 
             _entitlements_file ='../'+@project_name+'.entitlements'
