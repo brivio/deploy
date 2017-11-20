@@ -527,8 +527,25 @@ _extract_bin(){
     local line=$(cat $0|grep -En '^__EXTRAL_BIN__$'|awk 'BEGIN{FS=":"}{printf "%s\n",$1+1}')
     if [[ -n $line ]]; then
         cat $0|tail -n +$line>$1
-    fi
-    
+    fi   
+}
+_get_config(){
+    content=$(cat $0)
+    python -c '# coding=utf-8
+import json
+d = json.loads('$content')
+if "'$1'" in d: 
+    print d['$1']
+'
+}
+_set_config(){
+    content=$(cat $0)
+    python -c '# coding=utf-8
+import json
+d = json.loads('$content')
+if "'$1'" in d: 
+    print d['$1']
+'
 }
 _runtime_init(){
     _setup_script_env
