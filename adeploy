@@ -682,7 +682,7 @@ if [[ $1 = $ARG ]]; then
     cd $WORK_PATH
     for i in $APP_MODULES; do
         _build_log $i       
-        cat .${i}/src/main/AndroidManifest.xml|grep "uses-permission"|sort|uniq
+        cat .$i/src/main/AndroidManifest.xml|grep "uses-permission"|sort|uniq
     done
     _runtime_exit
 fi
