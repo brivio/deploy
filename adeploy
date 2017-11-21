@@ -564,7 +564,7 @@ sdk_download_url=
 EOF
     fi
     source $CONFIG
-    APP_MODULES=$(cat ./settings.gradle|grep -o -e "\'.*\'"|sed "s/\'//g"|sed "s/\"//g"|sed "s/\:/\//g")
+    APP_MODULES=$(cat ./settings.gradle|grep -o -e "\'.*\'"|sed "s/'//g"|sed "s/\"//g"|sed "s/\:/\//g")
 }
 _device_exist(){
     if [[ $(adb devices |wc -l) = "2" ]]; then
@@ -681,7 +681,7 @@ _add_help $ARG "获取排序去重后的uses-permission"
 if [[ $1 = $ARG ]]; then
     cd $WORK_PATH
     for i in $APP_MODULES; do
-        _build_log $i       
+        _build_log $i
         cat .$i/src/main/AndroidManifest.xml|grep "uses-permission"|sort|uniq
     done
     _runtime_exit
