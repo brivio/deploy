@@ -644,10 +644,13 @@ if [[ $1 = $ARG ]]; then
         local_zip='./android.zip'
         _build_log "远程获取api sdk"
         [[ -f $local_zip ]]&&rm -rf $local_zip
-        wget -q $sdk_download_url -O $local_zip
+        wget $sdk_download_url -O $local_zip
         [[ -d $sdk_dir ]]&&rm -rf $sdk_dir
+       
+        _build_log "解压 $local_zip"
         unzip -q $local_zip -d $sdk_dir
         [[ -f $local_zip ]]&&rm -rf $local_zip
+        
         printf "集成完成\n"
         _runtime_exit
     else
