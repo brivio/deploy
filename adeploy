@@ -210,7 +210,7 @@ _lower(){
     echo "$1"|tr "[:upper:]" "[:lower:]"
 }
 _trim(){
-    echo "$1"|sed 's/ //g'
+    echo "$1"|sed 's/ //g'|sed "s/\r//g"|sed "s/\n//g"
 }
 _length(){
     echo $(echo "$1"|wc -c)
@@ -564,7 +564,9 @@ sdk_download_url=
 EOF
     fi
     source $CONFIG
-    APP_MODULES=$(cat ./settings.gradle|grep -o -e "\'.*\'"|sed "s/'//g"|sed "s/\"//g"|sed "s/\:/\//g")
+    if [[ -f ./settings.gradle ]]; then
+        APP_MODULES=$(cat ./settings.gradle|grep -o -e "\'.*\'"|sed "s/'//g"|sed "s/\"//g"|sed "s/\:/\//g")    
+    fi
 }
 _device_exist(){
     if [[ $(adb devices |wc -l) = "2" ]]; then
@@ -609,6 +611,24 @@ _require(){
         echo "详见:$2"
     fi
 }
+_setup_crack(){
+    if ! _device_exist ; then
+        _error_log '没有设备连接'
+        _runtime_exit
+    fi
+    cpu=$(_trim $(adb shell getprop ro.product.cpu.abi))
+    case $cpu in
+        arm64-v8a )
+            ;;
+        armeabi-v7a )
+            ;;
+            * )
+                _error_log 'cpu不支持'
+                _runtime_exit
+            ;;
+    esac
+    adb shell "/data/mprop/$cpu/mprop ro.debuggable 1;stop;start"
+}
 _deploy_init
 if [[ -f './deploy.extra.sh' ]]; then
     source './deploy.extra.sh'
@@ -619,7 +639,7 @@ if [[ $1 = $ARG ]]; then
     cd $WORK_PATH
     if [[ -n "$sdk_download_url" ]]; then
         if [[ -z "$sdk_dir" ]]; then
-            $sdk_dir=./Api-SDK
+            sdk_dir=./Api-SDK
         fi
         local_zip='./android.zip'
         _build_log "远程获取api sdk"
@@ -737,6 +757,12 @@ build/
 *.iml
 EOF
     fi
+    _runtime_exit
+fi
+ARG="crack"
+_add_help $ARG "初始化"
+if [[ $1 = $ARG ]]; then
+    _setup_crack
     _runtime_exit
 fi
 _show_help

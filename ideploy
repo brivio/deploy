@@ -210,7 +210,7 @@ _lower(){
     echo "$1"|tr "[:upper:]" "[:lower:]"
 }
 _trim(){
-    echo "$1"|sed 's/ //g'
+    echo "$1"|sed 's/ //g'|sed "s/\r//g"|sed "s/\n//g"
 }
 _length(){
     echo $(echo "$1"|wc -c)
