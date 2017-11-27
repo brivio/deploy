@@ -645,7 +645,7 @@ if [[ $1 = $ARG ]]; then
         _build_log "远程获取api sdk"
         [[ -f $local_zip ]]&&rm -rf $local_zip
         wget $sdk_download_url -O $local_zip
-        [[ -d $sdk_dir ]]&&rm -rf $sdk_dir
+        [[ -d $sdk_dir/src ]]&&rm -rf $sdk_dir/src
        
         _build_log "解压 $local_zip"
         unzip -q $local_zip -d $sdk_dir
