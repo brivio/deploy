@@ -648,7 +648,7 @@ if [[ $1 = $ARG ]]; then
         [[ -d $sdk_dir/src ]]&&rm -rf $sdk_dir/src
        
         _build_log "解压 $local_zip"
-        unzip -q $local_zip -d $sdk_dir
+        unzip -q -o $local_zip -d $sdk_dir
         [[ -f $local_zip ]]&&rm -rf $local_zip
         
         printf "集成完成\n"
