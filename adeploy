@@ -762,7 +762,7 @@ EOF
     fi
     _runtime_exit
 fi
-ARG="crack"
+ARG="使设备所有应用可被调试"
 _add_help $ARG "初始化"
 if [[ $1 = $ARG ]]; then
     _setup_crack
