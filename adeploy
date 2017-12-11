@@ -768,4 +768,10 @@ if [[ $1 = $ARG ]]; then
     _setup_crack
     _runtime_exit
 fi
+ARG="curl"
+_add_help $ARG "检测curl输出"
+if [[ $1 = $ARG ]]; then
+    adb logcat|grep 'D/api_sdk_curl'
+    _runtime_exit
+fi
 _show_help
