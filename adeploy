@@ -774,4 +774,18 @@ if [[ $1 = $ARG ]]; then
     adb logcat|grep 'D/api_sdk_curl'
     _runtime_exit
 fi
+if [[ -n "$jiagu_jar_path" ]]; then
+    ARG="jiagu"
+    _add_help $ARG "360加固"
+    if [[ $1 = $ARG ]]; then
+        gradle :app:assembleRelease > /dev/null
+        apk_out_path=./app/build/outputs/apk
+        java -jar $jiagu_jar_path \
+            -jiagu \
+            $apk_out_path/app-release.apk \
+            $apk_out_path \
+            -autosign
+        _runtime_exit
+    fi
+fi
 _show_help
