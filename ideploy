@@ -86,7 +86,11 @@ _function_str(){
     done
 }
 _runtime_exit(){
-    _success_log "完成时间:$(_date)"
+    msg=""
+    if [[ -n "$HOSTNAME" ]]; then
+        msg=" [$HOSTNAME]"
+    fi
+    _success_log "完成时间:$(_date)$msg"
     exit
 }
 _check_script_env(){
