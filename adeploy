@@ -734,19 +734,27 @@ if [[ $1 = $ARG ]]; then
     _runtime_exit
 fi
 ARG="dump-screen"
-_add_help $ARG "截屏并获取xml"
+_add_help $ARG "截屏"
 if [[ $1 = $ARG ]]; then
     num=$(adb devices|grep 'device$'|wc -l)
     if [[ $num = "0" ]]; then
         _error_log "没有设备连接"
         _runtime_exit
     fi
-    _build_log "截屏并获取xml"
-    f=/data/local/tmp/uidump.xml
+    out_name="window_dump"
+    if [[ -n "$2" ]]; then
+        out_name=$2    
+    fi
+    _build_log "获取界面xml"
     
+    f=/data/local/tmp/uidump.xml
     adb shell uiautomator dump $f
-    adb pull $f ./uidump.origin.xml
-    tidy -utf8 -xml -q --show-errors 0 --show-warnings 0 -i --indent-attributes 1 ./uidump.origin.xml>./uidump.xml
+    adb pull $f ./$out_name.uix
+    _build_log "获取界面png"
+    
+    f=/data/local/tmp/uidump.png
+    adb shell screencap -p $f
+    adb pull $f ./$out_name.png
     _runtime_exit
 fi
 ARG="init"
