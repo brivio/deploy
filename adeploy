@@ -564,8 +564,6 @@ _deploy_init(){
     CONFIG='./deploy.config'
     if [[ ! -f $CONFIG ]]; then
         cat > $CONFIG <<EOF
-\#!/bin/bash
-\# 需要定义sdk_download_url，否则"$(basename $0) api"无法使用
 sdk_download_url=
 EOF
     fi
@@ -747,16 +745,19 @@ if [[ $1 = $ARG ]]; then
     if [[ -n "$2" ]]; then
         out_name=$2    
     fi
+    if [[ ! -d ./captures ]]; then
+        mkdir ./captures
+    fi
     _build_log "获取界面xml"
     
     f=/data/local/tmp/uidump.xml
     adb shell uiautomator dump $f
-    adb pull $f ./$out_name.uix
+    adb pull $f ./captures/$out_name.uix
     _build_log "获取界面png"
     
     f=/data/local/tmp/uidump.png
     adb shell screencap -p $f
-    adb pull $f ./$out_name.png
+    adb pull $f ./captures/$out_name.png
     _runtime_exit
 fi
 ARG="init"
