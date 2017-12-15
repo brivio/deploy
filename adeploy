@@ -793,7 +793,10 @@ if [[ -n "$jiagu_jar_path" ]]; then
     ARG="jiagu"
     _add_help $ARG "360加固"
     if [[ $1 = $ARG ]]; then
+        _build_log "开始编译"
         gradle :app:assembleRelease > /dev/null
+        
+        _build_log "开始加固"
         apk_out_path=./app/build/outputs/apk
         java -jar $jiagu_jar_path \
             -jiagu \
