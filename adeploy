@@ -590,10 +590,10 @@ _start_activity(){
     APP_NAME=`aapt dump badging $APK|grep "application-label:"| sed s/application-label://g | sed s/\'//g` 
     if _device_exist ; then
         _build_log "安装[$1]"
-        adb shell pm uninstall -k $APP_PACKAGE > /dev/null
-        adb install $APK > /dev/null
+        adb shell pm uninstall -k $APP_PACKAGE
+        adb install $APK
         _build_log "启动[$1]"
-        adb shell am start -n $APP_PACKAGE/$LOUNCH_ACITIVY > /dev/null
+        adb shell am start -n $APP_PACKAGE/$LOUNCH_ACITIVY
     fi
     
     DIST_PATH=~/app-bin
