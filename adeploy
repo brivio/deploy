@@ -662,20 +662,23 @@ if [[ $1 = $ARG ]]; then
         exit
     fi
 fi
-ARG="build"
-_add_help $ARG "编译、安装、运行项目
-     $(basename $0) build debug 编译debug版本(默认)
-     $(basename $0) build release 编译release版本
-     "
+ARG="debug"
+_add_help $ARG "编译、安装、运行debug版本"
 if [[ $1 = $ARG ]]; then
     cd $WORK_PATH
     _build_log "编译[$1]"
     mod=${2:-debug}
-    if [[ $mod = 'release' ]]; then
-        gradle :app:assembleRelease > /dev/null
-    else
-        gradle :app:assembleDebug > /dev/null
-    fi
+    gradle :app:assembleDebug
+    _start_activity $mod
+    _runtime_exit
+fi
+ARG="release"
+_add_help $ARG "编译、安装、运行release版本"
+if [[ $1 = $ARG ]]; then
+    cd $WORK_PATH
+    _build_log "编译[$1]"
+    mod=${2:-debug}
+    gradle :app:assembleRelease
     _start_activity $mod
     _runtime_exit
 fi
